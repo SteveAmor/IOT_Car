@@ -28,3 +28,7 @@ Requires transitions
 pip install transitions
 
 or clone from https://github.com/tyarkoni/transitions
+
+## TODO
+
+Refactor to make full use of the Class and get rid of the horrible procedural fudge
