@@ -56,10 +56,6 @@ void setup() {
 
   WiFi.begin(ssid, password);
   WiFi.config(ip, gateway, subnet);
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
 
   server.on ( "/", handleRoot);
   server.on ( "/beep1", handleBeep1); 
