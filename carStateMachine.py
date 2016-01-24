@@ -8,100 +8,98 @@ from transitions import Machine
 
 import os
 import time
-
-def beep(beeps):
-	os.system ("wget 192.168.0.1/beep%d -O ignitionTime.txt --quiet" %beeps)
-
-def CarDetected():
-	response = os.system("ping -c 1 192.168.0.1 > /dev/null 2>&1")
-	if response == 0:
-		return True
-	return False
-
-def CarNotDetected():
-	response = os.system("ping -c 3 192.168.0.1 > /dev/null 2>&1")
-	if response == 0:
-		return False
-	return True
-
-def departTasks():
-	pass
-
-def arrivalTasks():
-	pass
-
-def ignitionTime():
-	os.system("wget 192.168.0.1 -O ignitionTime.txt --quiet")
-	with open('ignitionTime.txt', 'r') as file:
-		ignitionTime = file.read()
-	file.close()
-	return ignitionTime
+import datetime
 
 # Statemachine:
 
-class Car(object):
-    def on_enter_waitingForCar(self): 
-		print ("Entered state waitingForCar")
+class CarDetector(object):
 
-    def on_enter_getIgnitionTime(self): 
-		print ("Entered state getIgnitionTime")
+	states=['waitingForCar', 'getIgnitionTime', 'departTasks', 'arrivalTasks', 'waitForNoCar']
 
-    def on_enter_departTasks(self): 
-		print ("Entered state departTasks")
+	transitions = [
+		{ 'trigger': 'detected', 'source': 'waitingForCar', 'dest': 'getIgnitionTime' },
+		{ 'trigger': 'error', 'source': 'getIgnitionTime', 'dest': 'waitingForCar' },
+		{ 'trigger': 'shorttime', 'source': 'getIgnitionTime', 'dest': 'departTasks' },
+		{ 'trigger': 'longtime', 'source': 'getIgnitionTime', 'dest': 'arrivalTasks' },
+		{ 'trigger': 'notdetected', 'source': 'waitForNoCar', 'dest': 'waitingForCar' },
+		{ 'trigger': 'advance', 'source': 'departTasks', 'dest': 'waitForNoCar' },
+		{ 'trigger': 'advance', 'source': 'arrivalTasks', 'dest': 'waitForNoCar' }
+	]
 
-    def on_enter_arrivalTasks(self): 
-		print ("Entered state arrivalTasks")
+	def __init__(self, name, IPAddress):
+		self.name = name
+		self.IPAddress = IPAddress
+		self.machine = Machine(self, states=CarDetector.states, transitions=CarDetector.transitions)
 
-    def on_enter_waitForNoCar(self): 
-		print ("Entered state waitForNoCar")
-
-
-
-stevesCar = Car()
-
-states=['waitingForCar', 'getIgnitionTime', 'departTasks', 'arrivalTasks', 'waitForNoCar']
-
-transitions = [
-    { 'trigger': 'detected', 'source': 'waitingForCar', 'dest': 'getIgnitionTime' },
-    { 'trigger': 'error', 'source': 'getIgnitionTime', 'dest': 'waitingForCar' },
-    { 'trigger': 'shorttime', 'source': 'getIgnitionTime', 'dest': 'departTasks' },
-    { 'trigger': 'longtime', 'source': 'getIgnitionTime', 'dest': 'arrivalTasks' },
-    { 'trigger': 'notdetected', 'source': 'waitForNoCar', 'dest': 'waitingForCar' },
-    { 'trigger': 'advance', 'source': 'departTasks', 'dest': 'waitForNoCar' },
-    { 'trigger': 'advance', 'source': 'arrivalTasks', 'dest': 'waitForNoCar' }
-]
-
-machine = Machine(stevesCar, states=states, transitions=transitions, initial='waitingForCar')
-
-while(1):
-
-	if stevesCar.state == 'waitingForCar':	
-		if CarDetected():
-			stevesCar.detected()
-		else:
+	def on_enter_waitingForCar(self):
+		self.printMessage()
+		while(not self.CarDetected()):
 			time.sleep(5)
+		self.detected()
 
-	elif stevesCar.state == 'getIgnitionTime':
+	def on_enter_getIgnitionTime(self):
+		self.printMessage()
 		try:
-			if int(ignitionTime()) < 180:
-				stevesCar.shorttime()
+			if int(self.ignitionTime()) < 30:
+				self.shorttime()
 			else:
-				stevesCar.longtime()
+				self.longtime()
 		except:
-			stevesCar.error()
+			self.error()
 
-	elif stevesCar.state == 'departTasks':
-		departTasks()
-		stevesCar.advance()
+	def on_enter_departTasks(self):
+		self.printMessage()
+		self.departTasks()
+		self.advance()
 
-	elif stevesCar.state == 'arrivalTasks':
-		arrivalTasks()
-		stevesCar.advance()
+	def on_enter_arrivalTasks(self):
+		self.printMessage()
+		self.arrivalTasks()
+		self.advance()
 
-	elif stevesCar.state == 'waitForNoCar':
-		if CarNotDetected():
-			stevesCar.notdetected()
-		else:
+	def on_enter_waitForNoCar(self):
+		self.printMessage()
+		while(not self.CarNotDetected()):
 			time.sleep(5)
+		self.notdetected()
+
+	def printMessage(self):
+		print(self.name),
+		print("entered state %s" %self.state),
+		print(datetime.datetime.now().strftime('%H:%M:%S %d/%m/%Y'))
+
+	def CarDetected(self):
+		response = os.system("ping -c 1 %s > /dev/null 2>&1" %self.IPAddress)
+		if response == 0:
+			return True
+		return False
+
+	def ignitionTime(self):
+		os.system("wget %s -O %s_ignitionTime.txt --quiet" %(self.IPAddress, self.name))
+		with open("%s_ignitionTime.txt" %self.name, 'r') as file:
+			ignitionTime = file.read()
+		file.close()
+		print(self.name),
+		print("ignition time is %s seconds" %ignitionTime)
+		return ignitionTime
+
+	def departTasks(self):
+		self.beep(2);
+
+	def arrivalTasks(self):
+		self.beep(3);
+
+	def beep(self, beeps):
+		os.system ("wget %s/beep%d -O %s_ignitionTime.txt --quiet" %(self.IPAddress, beeps, self.name))
+
+	def CarNotDetected(self):
+		response = os.system("ping -c 3 %s > /dev/null 2>&1" %self.IPAddress)
+		if response == 0:
+			return False
+		return True
 
 
+# Create an object and kick the state machine into life
+
+stevesCar = CarDetector("stevesCar", "192.168.0.1")
+stevesCar.to_waitingForCar() # forces calling on_enter_waitingForCar
